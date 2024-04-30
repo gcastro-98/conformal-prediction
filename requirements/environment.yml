@@ -1,0 +1,7 @@
+python=3.10
+numpy
+pandas
+matplotlib
+colorama
+conda-forge::mapie
+conda-forge::scikit-learn

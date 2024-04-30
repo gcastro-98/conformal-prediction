@@ -1,0 +1,31 @@
+{
+    "name": "${localEnv:CONDA_ENV_NAME:ConformalPrediction}",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": "..",
+        "args": {
+            "ENV_NAME": "${localEnv:CONDA_ENV_NAME:ConformalPrediction}",
+            "PYTHON_VER": "${localEnv:PYTHON_VER:3.10}"
+        }
+    },
+    "customizations": {
+        "settings": {
+            // we set the VCS interpreter to this one
+            "python.defaultInterpreterPath": "/opt/conda/envs/${localEnv:CONDA_ENV_NAME:ConformalPrediction}/bin/python3",
+            "python.selectInterpreter": "/opt/conda/envs/${localEnv:CONDA_ENV_NAME:ConformalPrediction}/bin/python3"
+        },
+        "vscode": {
+            "extensions": [
+                // / Docker Supporting Extensions
+                "ms-azuretools.vscode-docker",
+                "ms-vscode-remote.remote-containers",
+                // Python Extensions
+                "ms-python.python",
+                "ms-toolsai.jupyter",
+            ]
+        }
+    }
+
+    // and finally, this allows for the execution of commands after the build process has finished
+    // "postCreateCommand": "python3 tests/test1.py"
+}
