@@ -21,7 +21,7 @@
                 "ms-vscode-remote.remote-containers",
                 // Python Extensions
                 "ms-python.python",
-                "ms-toolsai.jupyter",
+                "ms-toolsai.jupyter"
             ]
         }
     }
