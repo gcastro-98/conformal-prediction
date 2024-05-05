@@ -16,4 +16,7 @@ RUN mkdir /requirements
 COPY requirements/* /requirements/
 
 # Install dependencies
-RUN /bin/bash /requirements/dependencies.sh $ENV_NAME 
+RUN /bin/bash /requirements/dependencies.sh $ENV_NAME
+ENV PATH /opt/conda/envs/$ENV_NAME/bin:$PATH
+
+CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--no-browser", "--allow-root"]

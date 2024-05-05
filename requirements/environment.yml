@@ -3,5 +3,7 @@ numpy
 pandas
 matplotlib
 colorama
+jupyter
+ipykernel
 conda-forge::mapie
 conda-forge::scikit-learn
