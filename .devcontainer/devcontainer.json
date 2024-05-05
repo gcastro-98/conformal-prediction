@@ -15,17 +15,24 @@
             "python.selectInterpreter": "/opt/conda/envs/${localEnv:CONDA_ENV_NAME:ConformalPrediction}/bin/python3"
         },
         "vscode": {
+            "settings": {
+                // this is because the DevContainer extension will not actually install the VSC extensions if
+                // `--platform` is used (for different OS) unless this is set to false
+                // See: https://github.com/microsoft/vscode-remote-release/issues/9616
+                // which is a duplicate of: https://github.com/microsoft/vscode/issues/174632
+                "extensions.verifySignature": false
+            },
             "extensions": [
-                // / Docker Supporting Extensions
                 "ms-azuretools.vscode-docker",
                 "ms-vscode-remote.remote-containers",
-                // Python Extensions
                 "ms-python.python",
-                "ms-toolsai.jupyter"
+                "ms-toolsai.jupyter",
+                "ms-toolsai.jupyter-keymap",
+                "ms-python.debugpy"
             ]
         }
     }
-
+    
     // and finally, this allows for the execution of commands after the build process has finished
     // "postCreateCommand": "python3 tests/test1.py"
 }
