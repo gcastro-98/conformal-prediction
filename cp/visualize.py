@@ -58,3 +58,86 @@ def data(
 
     return ax
 
+def goodness(
+    y_test,
+    y_pred,
+    lower_bound,
+    upper_bound,
+    coverage,
+    width,
+    rmse,
+    cwc,
+    ax=None,
+    subsample=None,
+    **kwargs
+):
+    # we sort the data for proper visualization
+    # and, if subsample not None, we take only the passed percentage
+    _sorted = _sort(
+        {'test': y_test, 'pred': y_pred, 
+        'low': lower_bound, 'up': upper_bound}, 
+        y_test, subsample)
+    y_test, y_pred = _sorted['test'], _sorted['pred']
+    lower_bound, upper_bound = _sorted['low'], _sorted['up']
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    # ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
+    # ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
+
+    error = y_pred - lower_bound
+    _outside = (y_test > y_pred + error) + (y_test < y_pred - error)
+    ax.errorbar(
+        y_test[~_outside],
+        y_pred[~_outside],
+        yerr=np.abs(error[~_outside]),
+        capsize=5, marker="o", elinewidth=2, linewidth=0,
+        color=C_STRONG,
+        label="Inside PI"
+        )
+    ax.errorbar(
+        y_test[_outside],
+        y_pred[_outside],
+        yerr=np.abs(error[_outside]),
+        capsize=5, marker="o", elinewidth=2, linewidth=0, 
+        color=C_LIGHT,
+        label="Outside PI"
+        )
+    ax.scatter(
+        y_test[_outside],
+        y_test[_outside],
+        marker="*", color="black",
+        label="True value"
+    )
+    ax.legend(loc='lower right')
+    ax.set_xlabel(kwargs.get('xlabel', "Groundtruth"))
+    ax.set_ylabel(kwargs.get('ylabel', "Prediction"))
+
+    lims = [np.min([ax.get_xlim(), ax.get_ylim()]),
+            np.max([ax.get_xlim(), ax.get_ylim()])]
+    ax.plot(lims, lims, '--', alpha=0.75, color="black", label="x=y")
+
+    # # and finally, the coverage and width as text
+    ax.annotate(
+        f"Coverage: {np.round(coverage, 3)}\n"
+        + f"Interval width: {np.round(width, 3)}\n"
+        + f"CWC: {np.round(cwc, 3)}\n"
+        + f"RMSE: {np.round(rmse, 3)}",
+        xy=(0., 0.), # point to annotate
+        xytext=(np.min(y_test) * 1.175, np.max(y_pred) * 0.72), 
+        bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
+    )
+
+    if 'title' in kwargs:
+        ax.set_title(kwargs['title'], fontweight='bold')
+    
+    if ax is None:
+        plt.savefig(kwargs.get('save_path', 'output/goodness.png'), dpi=200)
+        plt.show()
+        plt.close()
+        return
+
+    return ax
+
+
