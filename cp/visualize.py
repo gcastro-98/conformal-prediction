@@ -141,3 +141,49 @@ def goodness(
     return ax
 
 
+# ######## MARGINAL VS. CONDITIONAL COVERAGE ########
+
+# WIDTH SIZE OCURRENCE
+
+def width_size_occurrence(
+    intervals: np.ndarray, 
+    train_intervals: np.ndarray = None,
+    num_bins: int = None, 
+    ax=None, **kwargs):
+    if ax is None:
+        _, ax = plt.subplots()
+    _width = np.abs(intervals[:, 0, 0] - intervals[:, 1, 0])
+
+    if np.std(_width) < 1e-10:
+        # then all the intervals are the same width 
+        # thus, the histogram will not be displayed
+        _width[0], _width[1] = (1 + 1e-3) * _width[0], (1 - 1e-3) * _width[1]
+
+    if train_intervals is not None:
+        _width_train = np.abs(train_intervals[:, 0, 0] - train_intervals[:, 1, 0])
+        if np.std(_width_train) < 1e-10:
+            _width_train[0] = (1 + 1e-3) * _width_train[0]
+            _width_train[1] = (1 - 1e-3) * _width_train[1]
+
+        ax.hist(_width, bins=num_bins, color=C_STRONG, label='Test data')
+        ax.hist(_width_train, bins=num_bins, color=C_LIGHT, alpha=0.7, label='Train data')
+        ax.legend()
+    else:
+        ax.hist(_width, bins=num_bins, color=C_STRONG)
+
+    if 'x_lim' in kwargs:
+        ax.set_xlim(kwargs['x_lim'])
+    ax.set_xlabel(kwargs.get('xlabel', 'Interval width'))
+    ax.set_ylabel(kwargs.get('ylabel', 'Occurrence'))
+    # ax.legend()
+
+    if 'title' in kwargs:
+        ax.set_title(kwargs['title'], fontweight='bold')
+
+    if ax is None:
+        plt.savefig(kwargs.get('save_path', 'output/width-occurrence.png'), dpi=200)
+        plt.show()
+        plt.close()
+        return
+
+    return ax
