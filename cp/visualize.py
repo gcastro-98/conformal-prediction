@@ -1,8 +1,11 @@
 import os
+import six
+from typing import Dict, List
+from mapie.metrics import regression_ssc
+
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import Dict
-from mapie.metrics import regression_ssc
+import pandas as pd
 
 os.makedirs('output', exist_ok=True)
 C_STRONG: str = '#9B0A0A'
@@ -235,3 +238,47 @@ def coverage_by_width(
         return
 
     return ax
+
+
+# METRICS TABLE
+
+def dicts_to_dataframe(metrics: Dict[str, dict]) -> pd.DataFrame:
+    columns: List[str] = list(metrics.keys())
+    dicts: List[dict] = list(metrics.values())
+    rows: List[str] = dicts[0].keys()
+    df = pd.DataFrame({f: [_d.get(f, None) for _d in dicts] for f in rows}).transpose()
+    df.columns = columns
+    return df
+
+
+def render_mpl_table(data, col_width=3.0, row_height=0.625, font_size=14,
+                     row_colors=['#f1f1f2', 'w'], edge_color='w',
+                     bbox=[0, 0, 1, 1], header_columns=0,
+                     ax=None, **kwargs):
+    if ax is None:
+        size = (np.array(data.shape[::-1]) + np.array([.25, 1])) * np.array([col_width, row_height])
+        _, ax = plt.subplots(figsize=size)
+        ax.axis('off')
+
+    mpl_table = ax.table(cellText=np.round(data.values, 3), bbox=bbox, colLabels=data.columns, rowLabels=data.index, **kwargs)
+
+    mpl_table.auto_set_font_size(False)
+    mpl_table.set_fontsize(font_size)
+
+    for k, cell in six.iteritems(mpl_table._cells):
+        cell.set_edgecolor(edge_color)
+        cell.set_text_props(ha='center')
+        if k[0] == 0:  # if this is a column header cell
+            cell.set_text_props(weight='bold', color='w')
+            cell.set_facecolor(C_STRONG)
+        elif k[1] == -1:  # if this is a row header cell
+            cell.set_text_props(weight='bold', color='black')
+            cell.set_facecolor(C_LIGHT)
+        else:
+            cell.set_facecolor(row_colors[k[0]%len(row_colors)])
+    return ax
+
+
+def dataframe_to_png(df, filename):
+    _ = render_mpl_table(df, header_columns=0, col_width=2.0)
+    plt.savefig(filename)
