@@ -2,6 +2,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Dict
+from mapie.metrics import regression_ssc
 
 os.makedirs('output', exist_ok=True)
 C_STRONG: str = '#9B0A0A'
@@ -28,7 +29,7 @@ def data(
     # points = _sort(points)
     
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     if bounds is not None:
         bounds = _sort(bounds, bounds['X'])
@@ -81,7 +82,7 @@ def goodness(
     lower_bound, upper_bound = _sorted['low'], _sorted['up']
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     # ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
     # ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
@@ -118,7 +119,7 @@ def goodness(
             np.max([ax.get_xlim(), ax.get_ylim()])]
     ax.plot(lims, lims, '--', alpha=0.75, color="black", label="x=y")
 
-    # # and finally, the coverage and width as text
+    # and finally, some metrics as text
     ax.annotate(
         f"Coverage: {np.round(coverage, 3)}\n"
         + f"Interval width: {np.round(width, 3)}\n"
@@ -182,6 +183,53 @@ def width_size_occurrence(
 
     if ax is None:
         plt.savefig(kwargs.get('save_path', 'output/width-occurrence.png'), dpi=200)
+        plt.show()
+        plt.close()
+        return
+
+    return ax
+
+# COVERAGE BY WIDTH SIZE
+
+def coverage_by_width(
+    y_test: np.ndarray, 
+    intervals: np.ndarray, 
+    miscoverage: float,
+    cond_coverage: float,
+    hsic_coeff: float,
+    num_bins: int = 3, 
+    ax=None, **kwargs):
+
+    if ax is None:
+        _, ax = plt.subplots()
+
+    ax.bar(np.arange(num_bins),
+           regression_ssc(y_test, intervals, 
+                          num_bins=num_bins)[0],
+                          color=C_STRONG)
+    ax.axhline(y=1 - miscoverage, color='black', linestyle='-')
+    
+    ax.set_ylabel(kwargs.get('ylabel', "Coverage"))
+    ax.set_xlabel("Interval width")
+    
+    ax.tick_params(
+        axis='x', which='both', 
+        bottom=False, top=False, 
+        labelbottom=False)
+    
+    ax.annotate(
+        f"SSC score: {np.round(cond_coverage, 4)}\n" 
+        + f"HSIC coefficient: {np.round(hsic_coeff, 4)}",
+        xy=(0., 0.), # point to annotate
+        xytext=(-0.1, 0.05), 
+        bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
+    )
+    
+    if 'title' in kwargs:
+        ax.set_title(kwargs['title'])
+
+    if ax is None:
+        plt.savefig(kwargs.get('save_path', 'output/coverage-by-width.png'), dpi=200)
         plt.show()
         plt.close()
         return
