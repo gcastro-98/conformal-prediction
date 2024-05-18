@@ -1,4 +1,3 @@
-import os
 import warnings
 
 from typing import Tuple
@@ -12,7 +11,7 @@ def train_strategies(params: dict, base_estimator: dict,
                      strategies_params: dict, strategies_name: dict) -> Tuple[dict, dict, dict]:
     y_pred, int_pred, mapie_estimator = {}, {}, {}  
     X_train, X_test, y_train = params['X_train'], params['X_test'], params['y_train']
-    miscoverage, seed = params['miscoverage'], params['seed']
+    miscoverage, seed = params['miscoverage'], params['seed']  # seed is used only for CQR
     
     warnings.filterwarnings("ignore")
     for _strat, _strat_params in strategies_params.items():
