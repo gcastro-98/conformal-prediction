@@ -1,0 +1,16 @@
+name: Issue (self) assignment
+on:
+    issues:
+        types: [opened]
+jobs:
+    auto-assign:
+        runs-on: ubuntu-latest
+        permissions:
+            issues: write
+        steps:
+            - name: 'Issue auto-assignment to myself'
+              uses: pozil/auto-assign-issue@v1
+              with:
+                  assignees: gcastro-98
+                  numOfAssignee: 1
+                  allowSelfAssign: true
