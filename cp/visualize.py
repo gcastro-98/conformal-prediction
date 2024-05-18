@@ -282,3 +282,59 @@ def render_mpl_table(data, col_width=3.0, row_height=0.625, font_size=14,
 def dataframe_to_png(df, filename):
     _ = render_mpl_table(df, header_columns=0, col_width=2.0)
     plt.savefig(filename)
+
+
+# ######## COVERAGE SOUGTH vs. ALPHA for a given strategy ########
+
+def coverage_by_alpha(
+    coverages_arr: np.ndarray,
+    miscoverages_list: List[float],
+    strategy_name: str, ax=None, 
+    **kwargs):
+
+    if ax is None:
+        _, ax = plt.subplots()
+
+    sought_coverage = [coverages_arr[_i, :] for _i in range(len(miscoverages_list))][::-1]
+    expected_coverage = np.round(1 - np.array(miscoverages_list), 2).tolist()[::-1]
+
+    ax.set_ylabel("Sought coverage")
+    ax.set_xlabel("Expected coverage")
+
+    bplot = ax.boxplot(sought_coverage, patch_artist=True)
+    ax.plot(
+        range(1, len(miscoverages_list) + 1), 
+        expected_coverage,
+        color='black', linestyle='--', 
+        label='Ideal case',
+        )
+    ax.set_xticks(range(1, len(miscoverages_list) + 1), 
+                  labels=expected_coverage)
+    ax.set_yticks(expected_coverage, 
+                  labels=expected_coverage)
+    
+    for patch in bplot['boxes']:
+        patch.set_facecolor(C_STRONG)
+    
+    # ax.tick_params(
+    #     axis='x', which='both', 
+    #     bottom=False, top=False, 
+    #     labelbottom=False)
+    
+    # ax.annotate(
+    #     f"SSC score: {np.round(cond_coverage, 4)}\n" 
+    #     + f"HSIC coefficient: {np.round(hsic_coeff, 4)}",
+    #     xy=(0., 0.), # point to annotate
+    #     xytext=(-0.1, 0.05), 
+    #     bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
+    # )
+    
+    ax.set_title(strategy_name)
+
+    if ax is None:
+        plt.savefig(kwargs.get('save_path', 'output/coverage-by-alpha.png'), dpi=200)
+        plt.show()
+        plt.close()
+        return
+
+    return ax

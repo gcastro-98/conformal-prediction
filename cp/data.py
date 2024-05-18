@@ -15,13 +15,12 @@ np.random.seed(SEED)
 
 # AUXILIARY FUNCTIONS
 
-def split(X: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, ...]:
+def split(X: np.ndarray, y: np.ndarray, seed: int = SEED) -> Tuple[np.ndarray, ...]:
     """
     Split the data into training and testing sets.
     """
     return train_test_split(
-        X.values, y.values, test_size=0.3, 
-        random_state=SEED, shuffle=True)
+        X.values, y.values, test_size=0.3, random_state=seed, shuffle=True)
 
 
 # ########################################################################
