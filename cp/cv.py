@@ -3,7 +3,6 @@ from typing import Any, List
 from sklearn.model_selection import KFold
 from mapie.regression import MapieQuantileRegressor, MapieRegressor
 from mapie.metrics import regression_coverage_score_v2
-
 from cp import logger as _logger
 
 import pandas as pd
@@ -45,6 +44,7 @@ def coverage_in_function_of_alpha(X: pd.DataFrame, y: pd.Series, miscoverages_li
                 _, _int_pred = mapie.predict(X_test, alpha=miscoverage)
 
             else:
+                strategy_params.update({'alpha': miscoverage})
                 mapie = MapieQuantileRegressor(base_estimator, **strategy_params)
                 mapie.fit(X_train, y_train, random_state=seed)
                 _, _int_pred = mapie.predict(X_test)
