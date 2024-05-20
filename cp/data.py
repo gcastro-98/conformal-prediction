@@ -2,7 +2,7 @@
 This module contains the data retrieval functions for the different problems.
 """
 
-from os import makedirs
+from os import makedirs, path
 from math import pi as _pi
 from typing import Tuple
 from sklearn.model_selection import train_test_split
@@ -148,3 +148,44 @@ class RegressionProblem:
 
     def _get_label(self) -> pd.DataFrame:
         return self.df[self._label_name]
+    
+
+# ########################################################################
+# TIME SERIES DATA
+# ########################################################################
+
+# ELECTRICITY DEMAND PROBLEM
+
+class TimeSeriesProblem:
+    """
+    Base class for time series' data.
+    """
+    def __init__(self, n_lag: int = 5):
+        self._n_lag = n_lag
+        self.df = self._get_data()
+    
+    def visualize_data(self) -> None:
+        plt.figure(figsize=(15, 5))
+        self.df['Demand'].plot(color=C_STRONG)
+        plt.ylabel("Hourly demand (GW)")
+        plt.xlabel("Date")
+        plt.show();
+
+    def _get_data(self) -> pd.DataFrame:
+        if not path.exists('input/demand_temperature.csv'):
+            url_file = "https://raw.githubusercontent.com/scikit-learn-contrib/MAPIE/master/examples/data/demand_temperature.csv"
+            df = pd.read_csv(url_file, parse_dates=True, index_col=0)
+            df["Date"] = pd.to_datetime(df.index)
+            df["Weekofyear"] = df.Date.dt.isocalendar().week.astype("int64")
+            df["Weekday"] = df.Date.dt.isocalendar().day.astype("int64")
+            df["Hour"] = df.index.hour
+            for hour in range(1, self._n_lag):
+                df[f"Lag_{hour}"] = df["Demand"].shift(hour)
+            
+            df.to_csv('input/demand_temperature.csv', index=False)
+        else:
+            df = pd.read_csv('input/demand_temperature.csv')
+        
+        return df
+
+    
