@@ -160,18 +160,56 @@ class TimeSeriesProblem:
     """
     Base class for time series' data.
     """
-    def __init__(self, n_lag: int = 5):
-        self._n_lag = n_lag
-        self.df = self._get_data()
+    def __init__(self, n_lag: int = 5, test_days: int = 7, right_pad_hours: int = 0):
+        """
+        Time series data for electricity demand forecasting problem.
+
+        Parameters:
+        -----------
+        n_lag : int
+            Number of lagged features to consider in the model.
+        test_days : int
+            Number of days to consider for the test set.
+        right_pad : int
+            Number of hours to consider for padding the right side of the data.
+            If right_pad is > 0, the test set will be interspersed with the training set.
+
+        """
+        self._n_lag: int = n_lag 
+        self._num_test_steps: int = 24 * test_days
+        self._right_pad: int = right_pad_hours
+        assert 0 <= self._right_pad <= 1344 - self._num_test_steps, \
+            f"Right pad must be between 1 and 1344 - test_days * 24 hours = 1344 - {test_days * 24} = {1344 - test_days * 24}"
+        
+        self.features = ["Weekofyear", "Weekday", "Hour", "Temperature"] 
+        self.features += [f"Lag_{hour}" for hour in range(1, self._n_lag)]
+        self.label = "Demand"
+        
+        self.train_df, self.test_df = self._get_train_test_df()
     
     def visualize_data(self) -> None:
         plt.figure(figsize=(15, 5))
-        self.df['Demand'].plot(color=C_STRONG)
+        if self._right_pad > 0:
+            self.train_df['Demand'].iloc[:-self._right_pad].plot(color=C_STRONG, label='Train')
+            self.test_df['Demand'].plot(color=C_LIGHT, label='Test')
+            self.train_df['Demand'].iloc[-self._right_pad:].plot(color=C_STRONG)
+        else:
+            self.train_df['Demand'].plot(color=C_STRONG, label='Train')
+            self.test_df['Demand'].plot(color=C_LIGHT, label='Test')
+        
+        plt.legend()
         plt.ylabel("Hourly demand (GW)")
         plt.xlabel("Date")
         plt.show();
-
-    def _get_data(self) -> pd.DataFrame:
+        
+    def get_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        X_train = self.train_df.loc[~np.any(self.train_df[self.features].isnull(), axis=1), self.features]
+        y_train = self.train_df.loc[X_train.index, "Demand"]
+        X_test = self.test_df[self.features]
+        y_test = self.test_df["Demand"]
+        return X_train.values, X_test.values, y_train.values, y_test.values
+        
+    def _get_train_test_df(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         if not path.exists('input/demand_temperature.csv'):
             url_file = "https://raw.githubusercontent.com/scikit-learn-contrib/MAPIE/master/examples/data/demand_temperature.csv"
             df = pd.read_csv(url_file, parse_dates=True, index_col=0)
@@ -185,7 +223,16 @@ class TimeSeriesProblem:
             df.to_csv('input/demand_temperature.csv', index=False)
         else:
             df = pd.read_csv('input/demand_temperature.csv')
-        
-        return df
+
+        if self._right_pad > 0:
+            train_df: pd.DataFrame = df.iloc[:-self._num_test_steps-self._right_pad, :].copy()
+            test_df: pd.DataFrame = df.iloc[-self._num_test_steps-self._right_pad:-self._right_pad, :].copy()
+            train_df = pd.concat([train_df, df.iloc[-self._right_pad:, :].copy()], axis=0)
+        else:
+            train_df = df.iloc[:-self._num_test_steps, :].copy()
+            test_df = df.iloc[-self._num_test_steps:, :].copy()
+
+        return train_df, test_df
+    
 
     

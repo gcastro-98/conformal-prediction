@@ -20,7 +20,7 @@ def rmse(y_pred: dict, y_test: ndarray) -> dict:
     return errors
 
 
-def cwc(intervals: dict, y_test: ndarray, miscoverage: float) -> dict:
+def cwc(intervals: dict, y_test: ndarray, miscoverage: float, eta: float = 0.01) -> dict:
     """
     Coverage Width-based Criterion (CWC) obtained by the prediction intervals.
     
@@ -51,7 +51,7 @@ def cwc(intervals: dict, y_test: ndarray, miscoverage: float) -> dict:
             y_test,
             intervals[_strat][:, 0, 0],
             intervals[_strat][:, 1, 0],
-            eta=0.01, alpha=miscoverage)
+            eta=eta, alpha=miscoverage)
 
     return scores
 
