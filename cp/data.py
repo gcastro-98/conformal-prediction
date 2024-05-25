@@ -200,13 +200,13 @@ class TimeSeriesProblem:
         plt.legend()
         plt.ylabel("Hourly demand (GW)")
         plt.xlabel("Date")
-        plt.show();
+        plt.show()
         
     def get_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        X_train = self.train_df.loc[~np.any(self.train_df[self.features].isnull(), axis=1), self.features]
-        y_train = self.train_df.loc[X_train.index, "Demand"]
+        X_train = self.train_df[self.features]
+        y_train = self.train_df[self.label]
         X_test = self.test_df[self.features]
-        y_test = self.test_df["Demand"]
+        y_test = self.test_df[self.label]
         return X_train.values, X_test.values, y_train.values, y_test.values
         
     def _get_train_test_df(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -231,6 +231,8 @@ class TimeSeriesProblem:
         else:
             train_df = df.iloc[:-self._num_test_steps, :].copy()
             test_df = df.iloc[-self._num_test_steps:, :].copy()
+
+        train_df = train_df.loc[~np.any(train_df[self.features].isnull(), axis=1)]
 
         return train_df, test_df
     

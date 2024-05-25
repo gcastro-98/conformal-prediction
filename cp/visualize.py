@@ -11,6 +11,7 @@ os.makedirs('output', exist_ok=True)
 C_STRONG: str = '#9B0A0A'
 C_MEDIUM: str = '#800000'
 C_LIGHT: str = '#F2BFBF'
+C_PRED: str = '#F87500'
 
 
 def _sort(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
@@ -21,6 +22,16 @@ def _sort(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
             size=int(len(indices) * subsample))
 
     return {_k: _v[indices] for _k, _v in data.items()}
+
+
+def _subsample(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
+    if subsample is not None:
+        indices = np.random.choice(
+            range(len(ref)), replace=False,
+            size=int(len(ref) * subsample))
+
+    return {_k: _v[indices] for _k, _v in data.items()}
+
 
 
 def data(
@@ -75,14 +86,13 @@ def goodness(
     subsample=None,
     **kwargs
 ):
-    # we sort the data for proper visualization
-    # and, if subsample not None, we take only the passed percentage
-    _sorted = _sort(
-        {'test': y_test, 'pred': y_pred, 
-        'low': lower_bound, 'up': upper_bound}, 
-        y_test, subsample)
-    y_test, y_pred = _sorted['test'], _sorted['pred']
-    lower_bound, upper_bound = _sorted['low'], _sorted['up']
+    if subsample is not None:
+        _subset = _subsample(
+            {'test': y_test, 'pred': y_pred, 
+            'low': lower_bound, 'up': upper_bound}, 
+            y_test, subsample)
+        y_test, y_pred = _subset['test'], _subset['pred']
+        lower_bound, upper_bound = _subset['low'], _subset['up']
 
     if ax is None:
         _, ax = plt.subplots()
@@ -90,12 +100,14 @@ def goodness(
     # ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
     # ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
 
-    error = y_pred - lower_bound
-    _outside = (y_test > y_pred + error) + (y_test < y_pred - error)
+    _outside = (y_test > upper_bound) + (y_test < lower_bound)
+    error = np.zeros((2, len(y_pred)))
+    error[0, :] = y_pred - lower_bound
+    error[1, :] = upper_bound - y_pred
     ax.errorbar(
         y_test[~_outside],
         y_pred[~_outside],
-        yerr=np.abs(error[~_outside]),
+        yerr=error[:, ~_outside],
         capsize=5, marker="o", elinewidth=2, linewidth=0,
         color=C_STRONG,
         label="Inside PI"
@@ -103,7 +115,7 @@ def goodness(
     ax.errorbar(
         y_test[_outside],
         y_pred[_outside],
-        yerr=np.abs(error[_outside]),
+        yerr=error[:, _outside],
         capsize=5, marker="o", elinewidth=2, linewidth=0, 
         color=C_LIGHT,
         label="Outside PI"
@@ -129,7 +141,7 @@ def goodness(
         + f"CWC: {np.round(cwc, 3)}\n"
         + f"RMSE: {np.round(rmse, 3)}",
         xy=(0., 0.), # point to annotate
-        xytext=(np.min(y_test) * 1.175, np.max(y_pred) * 0.72), 
+        xytext=kwargs.get('xytext', (np.min(y_test) * 1.175, np.max(y_pred) * 0.72)),
         bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
     )
 
@@ -337,4 +349,47 @@ def coverage_by_alpha(
         plt.close()
         return
 
+    return ax
+
+
+# ######## TIME SERIES DATA ########
+
+# PREDICTED VALUES & INTERVALS
+
+def ts(
+        points, 
+        intervals=None, 
+        ax=None,
+        **kwargs
+        ) -> None:
+    
+    if ax is None:
+        _, ax = plt.subplots()
+    
+    ax.set_ylabel("Hourly demand (GW)")
+    ax.plot(
+        points['X_train'][len(points['X_train']) * 3 // 4:], 
+        points['y_train'][len(points['X_train']) * 3 // 4:], 
+        lw=2, label="Training data", color=C_STRONG)
+    ax.plot(points['X'], points['y_pred'], lw=1.5, label="Predictions", color=C_PRED)
+    ax.plot(points['X'], points['y'], lw=0.75, label="Test data", color=C_LIGHT)
+    ax.fill_between(
+        intervals['X'],
+        intervals['y_low'],
+        intervals['y_up'],
+        color=C_PRED,
+        alpha=0.5,
+        label="Prediction intervals",
+    )
+    ax.legend()
+    ax.set_xlabel(kwargs.get('xlabel', "Date"))
+    ax.set_ylabel(kwargs.get('ylabel', "Hourly demand (GW)"))
+
+    if 'title' in kwargs:
+        ax.set_title(kwargs['title'])
+    if ax is None:
+        plt.savefig(kwargs.get('save_path', 'output/data.png'), dpi=200)
+        plt.show()
+        plt.close()
+        return
     return ax

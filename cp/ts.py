@@ -34,7 +34,7 @@ def train_without_partial_fit(
         X_test, alpha=miscoverage, 
         ensemble=True, optimize_beta=True)  
     
-    return enbpi, y_pred, int_pred
+    return y_pred, int_pred, enbpi
 
 def train(
     X_train: np.ndarray, 
@@ -51,7 +51,7 @@ def train(
     logger.debug(4 * " " + "This may take a while")
     enbpi.fit(X_train, y_train)
 
-    y_pred, int_pred = np.zeros((X_test.shape[0], 2, 1)), np.zeros((X_test.shape[0], 2, 1))
+    y_pred, int_pred = np.zeros((X_test.shape[0], )), np.zeros((X_test.shape[0], 2, 1))
     logger.info("Inferring while adjusting residuals (partial fit)")
     y_pred[:gap], int_pred[:gap, :, :] = enbpi.predict(
         X_test[:gap, :], alpha=miscoverage, ensemble=True, optimize_beta=True
@@ -70,4 +70,4 @@ def train(
                 ensemble=True,
                 optimize_beta=True)
 
-    return enbpi, y_pred, int_pred 
+    return y_pred, int_pred, enbpi
