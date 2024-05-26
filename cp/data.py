@@ -161,7 +161,12 @@ class TimeSeriesProblem:
     """
     Base class for time series' data.
     """
-    def __init__(self, n_lag: int = 5, test_days: int = 7, right_pad_hours: int = 0):
+    def __init__(
+            self, 
+            n_lag: int = 5, 
+            test_days: int = 7, 
+            right_pad_hours: int = 0,
+            with_change_point: bool = False):
         """
         Time series data, for electricity demand forecasting problem, containing a 
         total of 1340 samples.
@@ -175,8 +180,12 @@ class TimeSeriesProblem:
         right_pad : int
             Number of hours to consider for padding the right side of the data.
             If right_pad is > 0, the test set will be interspersed with the training set.
+        with_change_point : bool
+            If True, then the electricity demand is decreased by 2 GW in the middle of test 
+            set (simulating, this way, an exogenous event).
 
         """
+        self._with_change_point: bool = with_change_point
         self._n_samples: int = 1340
         self._n_lag: int = n_lag 
         self._num_test_steps: int = 24 * test_days
@@ -236,9 +245,11 @@ class TimeSeriesProblem:
             test_df = df.iloc[-self._num_test_steps:, :].copy()
 
         train_df = train_df.loc[~np.any(train_df[self.features].isnull(), axis=1)]
+        if self._with_change_point:
+            test_df[self.label].iloc[len(test_df)// 2:] -= 2
 
         return train_df, test_df
-    
+        
 
 # ################ PADDED TIMESERIES FOR K-FOLDS ################
 
@@ -250,7 +261,7 @@ def compute_test_days_and_pad_multiplicator(K: int) -> None:
     return test_days, pad_hour_multiplicator
 
 
-def visualize_ts_K_folds(K) -> None:
+def visualize_ts_K_folds(K, with_change_point: bool = False) -> None:
     """
     Visualize the K-folds for the time series problem.
     """
@@ -259,9 +270,14 @@ def visualize_ts_K_folds(K) -> None:
     colors: np.ndarray = _get_k_folds_cmap()(plt.Normalize(0, K)(np.arange(1, K + 1)))
 
     _train_df, _test_df = TimeSeriesProblem()._get_train_test_df()
-    pd.concat([_train_df, _test_df], axis=0)['Demand'].plot(color='black', ls='--', lw=1)
+    pd.concat([_train_df, _test_df], axis=0)['Demand'].plot(
+        color='black', ls='--', lw=1, 
+        label='Original' if with_change_point else 'Original')
     for _j in range(K):
-        _, test_df = TimeSeriesProblem(test_days=test_days, right_pad_hours=int(pad_hours_multiplicator * _j))._get_train_test_df()
+        _, test_df = TimeSeriesProblem(
+            test_days=test_days, 
+            right_pad_hours=int(pad_hours_multiplicator * _j), 
+            with_change_point=with_change_point)._get_train_test_df()
         test_df['Demand'].plot(color=colors[_j], label=f'Fold nº {_j + 1}')
     
 

@@ -253,7 +253,7 @@ def coverage_by_width(
     
     ax.tick_params(
         axis='x', which='both', 
-        bottom=False, top=False, 
+        bottom=True, top=False, 
         labelbottom=False)
     
     ax.annotate(

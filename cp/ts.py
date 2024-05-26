@@ -22,14 +22,16 @@ def train_without_partial_fit(
         y_train: np.ndarray, 
         X_test: np.ndarray,
         miscoverage: float, 
-        base_model: Any) \
+        base_model: Any, 
+        silent: bool = False) \
     -> MapieTimeSeriesRegressor:
     enbpi = MapieTimeSeriesRegressor(base_model, method="enbpi", **ENBPI_PARAMS)
-    logger.info("Traning EnbPI without partial fit to adjust residuals")
-    logger.debug(4 * " " + "This may take a while")
+    if not silent:
+        logger.info("Traning EnbPI without partial fit to adjust residuals")
+        logger.debug(4 * " " + "This may take a while")
     enbpi.fit(X_train, y_train)
-
-    logger.info("Inferring")
+    if not silent:
+        logger.info("Inferring")
     y_pred, int_pred = enbpi.predict(
         X_test, alpha=miscoverage, 
         ensemble=True, optimize_beta=True)  
@@ -43,22 +45,26 @@ def train(
     y_test: np.ndarray,
     miscoverage: float, 
     base_model: Any,
-    gap: int = 1) \
+    gap: int = 1, 
+    silent: bool = False) \
     -> MapieTimeSeriesRegressor:
 
     enbpi = MapieTimeSeriesRegressor(base_model, method="enbpi", **ENBPI_PARAMS)
-    logger.info("Traning EnbPI")
-    logger.debug(4 * " " + "This may take a while")
+    if not silent:
+        logger.info("Traning EnbPI")
+        logger.debug(4 * " " + "This may take a while")
     enbpi.fit(X_train, y_train)
 
     y_pred, int_pred = np.zeros((X_test.shape[0], )), np.zeros((X_test.shape[0], 2, 1))
-    logger.info("Inferring while adjusting residuals (partial fit)")
+    if not silent:
+        logger.info("Inferring while adjusting residuals (partial fit)")
     y_pred[:gap], int_pred[:gap, :, :] = enbpi.predict(
         X_test[:gap, :], alpha=miscoverage, ensemble=True, optimize_beta=True
     )
     
     for step in range(gap, len(X_test), gap):
-        logger.debug(4 * " " + f"Adjusting residuals for step {step}")
+        if not silent:
+            logger.debug(4 * " " + f"Adjusting residuals for step {step}")
         enbpi.partial_fit(
             X_test[(step - gap):step, :],
             y_test[(step - gap):step])

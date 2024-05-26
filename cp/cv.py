@@ -118,7 +118,12 @@ def coverage_in_function_of_alpha(X: pd.DataFrame, y: pd.Series, miscoverages_li
 
 
 def ts_coverage_in_function_of_alpha(
-        miscoverages_list: list, base_model_params: Any, strategy_name: str, silent: bool = False, K: int = 10) -> np.ndarray:
+        miscoverages_list: list, 
+        base_model_params: Any, 
+        strategy_name: str, 
+        with_change_point: bool = False,
+        silent: bool = False, 
+        K: int = 10) -> np.ndarray:
     """
     Perform a K-fold cross validation and return the coverage of the predicted confidence intervals in function of the miscoverage level. 
     Thus, the returned array is of shape (len(miscoverages_list), K).
@@ -139,7 +144,9 @@ def ts_coverage_in_function_of_alpha(
             if not silent:
                 logger.debug(8 * " " + f"Training {strategy_name} for fold {_j + 1}/{K}")
 
-            ts_problem = data.TimeSeriesProblem(test_days=test_days, right_pad_hours=int(pad_hours_multiplicator * _j))
+            ts_problem = data.TimeSeriesProblem(
+                test_days=test_days, right_pad_hours=int(pad_hours_multiplicator * _j),
+                with_change_point=with_change_point)
             X_train, X_test, y_train, y_test = ts_problem.get_arrays()
             
             warnings.filterwarnings("ignore")
