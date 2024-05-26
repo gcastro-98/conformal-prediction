@@ -56,7 +56,7 @@ def cwc(intervals: dict, y_test: ndarray, miscoverage: float, eta: float = 0.01)
     return scores
 
 
-def coverage(intervals: dict, y_test: ndarray, type: str = 'v2') -> dict:
+def coverage(intervals: dict, y_test: ndarray, type: str = 'v2', silent: bool = False) -> dict:
     coverages = {}
 
     if type == 'v2':  # we use 'regression_coverage_score_v2'
@@ -66,7 +66,8 @@ def coverage(intervals: dict, y_test: ndarray, type: str = 'v2') -> dict:
             _y, _int[:, 0, 0], _int[_strat][:, 1, 0])
 
     for _strat in intervals.keys():
-        logger.info(f"Validating {_strat} coverage")
+        if not silent:
+            logger.info(f"Validating {_strat} coverage")
         coverages[_strat] = float(_func(y_test, intervals[_strat]))
     
     return coverages

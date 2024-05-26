@@ -1,6 +1,6 @@
 import os
 import six
-from typing import Dict, List
+from typing import Dict, List, Any
 from mapie.metrics import regression_ssc
 
 import matplotlib.pyplot as plt
@@ -13,6 +13,8 @@ C_MEDIUM: str = '#800000'
 C_LIGHT: str = '#F2BFBF'
 C_PRED: str = '#F87500'
 
+
+# ########### AUXILIARY FUNCTIONS ###########
 
 def _sort(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
     indices = np.argsort(ref)
@@ -33,12 +35,14 @@ def _subsample(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
     return {_k: _v[indices] for _k, _v in data.items()}
 
 
+# ########### MAIN FUNCTIONS ###########
+
 def data(
     points: Dict, 
     bounds=None, 
     intervals=None, 
     ax=None, 
-    **kwargs):
+    **kwargs) -> Any:
     # points = _sort(points)
     
     if ax is None:
@@ -86,7 +90,7 @@ def goodness(
     fading_with_lead_time: bool = False,
     subsample: float = None,
     **kwargs
-):
+) -> Any:
     
     if subsample is not None:
         _subset = _subsample(
@@ -185,7 +189,7 @@ def width_size_occurrence(
     intervals: np.ndarray, 
     train_intervals: np.ndarray = None,
     num_bins: int = None, 
-    ax=None, **kwargs):
+    ax=None, **kwargs) -> Any:
     if ax is None:
         _, ax = plt.subplots()
     _width = np.abs(intervals[:, 0, 0] - intervals[:, 1, 0])
@@ -233,7 +237,7 @@ def coverage_by_width(
     cond_coverage: float,
     hsic_coeff: float,
     num_bins: int = 3, 
-    ax=None, **kwargs):
+    ax=None, **kwargs) -> Any:
 
     if ax is None:
         _, ax = plt.subplots()
@@ -286,7 +290,7 @@ def dicts_to_dataframe(metrics: Dict[str, dict]) -> pd.DataFrame:
 def render_mpl_table(data, col_width=3.0, row_height=0.625, font_size=14,
                      row_colors=['#f1f1f2', 'w'], edge_color='w',
                      bbox=[0, 0, 1, 1], header_columns=0,
-                     ax=None, **kwargs):
+                     ax=None, **kwargs) -> Any:
     if ax is None:
         size = (np.array(data.shape[::-1]) + np.array([.25, 1])) * np.array([col_width, row_height])
         _, ax = plt.subplots(figsize=size)
@@ -311,7 +315,7 @@ def render_mpl_table(data, col_width=3.0, row_height=0.625, font_size=14,
     return ax
 
 
-def dataframe_to_png(df, filename):
+def dataframe_to_png(df, filename) -> None:
     _ = render_mpl_table(df, header_columns=0, col_width=2.0)
     plt.savefig(filename)
 
@@ -322,7 +326,7 @@ def coverage_by_alpha(
     coverages_arr: np.ndarray,
     miscoverages_list: List[float],
     strategy_name: str, ax=None, 
-    **kwargs):
+    **kwargs) -> Any:
 
     if ax is None:
         _, ax = plt.subplots()
@@ -348,19 +352,6 @@ def coverage_by_alpha(
     for patch in bplot['boxes']:
         patch.set_facecolor(C_STRONG)
     
-    # ax.tick_params(
-    #     axis='x', which='both', 
-    #     bottom=False, top=False, 
-    #     labelbottom=False)
-    
-    # ax.annotate(
-    #     f"SSC score: {np.round(cond_coverage, 4)}\n" 
-    #     + f"HSIC coefficient: {np.round(hsic_coeff, 4)}",
-    #     xy=(0., 0.), # point to annotate
-    #     xytext=(-0.1, 0.05), 
-    #     bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
-    # )
-    
     ax.set_title(strategy_name)
 
     if ax is None:
@@ -381,7 +372,7 @@ def ts(
         intervals=None, 
         ax=None,
         **kwargs
-        ) -> None:
+        ) -> Any:
     
     if ax is None:
         _, ax = plt.subplots()
@@ -413,3 +404,24 @@ def ts(
         plt.close()
         return
     return ax
+
+
+def rolling_coverage(
+        rolling_coverage: dict, 
+        x_values: pd.Index,
+        window_size: int, 
+        **kwargs) -> None:
+    plt.figure(figsize=(15, 5))
+    plt.xlabel(kwargs.get('xlabel', "Date"))
+    plt.ylabel(kwargs.get('ylabel', f"Rolling coverage [{window_size} hours]"))
+    
+    plt.plot(x_values, rolling_coverage['EnbPI_nP'], label="Without update of residuals", color=C_LIGHT)
+    plt.plot(x_values, rolling_coverage['EnbPI'], label="With update of residuals", color=C_STRONG)
+    plt.legend()
+
+    if 'title' in kwargs:
+        plt.title(kwargs['title'])
+        
+    plt.savefig(kwargs.get('save_path', 'output/rolling-coverage.png'), dpi=200)
+    plt.show();
+    plt.close();
