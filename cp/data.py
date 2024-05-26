@@ -12,6 +12,7 @@ from scipy.stats import norm
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 SEED: int = 123
 np.random.seed(SEED)
@@ -162,7 +163,8 @@ class TimeSeriesProblem:
     """
     def __init__(self, n_lag: int = 5, test_days: int = 7, right_pad_hours: int = 0):
         """
-        Time series data for electricity demand forecasting problem.
+        Time series data, for electricity demand forecasting problem, containing a 
+        total of 1340 samples.
 
         Parameters:
         -----------
@@ -175,11 +177,12 @@ class TimeSeriesProblem:
             If right_pad is > 0, the test set will be interspersed with the training set.
 
         """
+        self._n_samples: int = 1340
         self._n_lag: int = n_lag 
         self._num_test_steps: int = 24 * test_days
         self._right_pad: int = right_pad_hours
-        assert 0 <= self._right_pad <= 1344 - self._num_test_steps, \
-            f"Right pad must be between 1 and 1344 - test_days * 24 hours = 1344 - {test_days * 24} = {1344 - test_days * 24}"
+        assert 0 <= self._right_pad <= self._n_samples - self._num_test_steps, \
+            f"Right pad must be between 1 and {self._n_samples} - test_days * 24 hours = {self._n_samples} - {test_days * 24} = {self._n_samples - test_days * 24}"
         
         self.features = ["Weekofyear", "Weekday", "Hour", "Temperature"] 
         self.features += [f"Lag_{hour}" for hour in range(1, self._n_lag)]
@@ -237,4 +240,41 @@ class TimeSeriesProblem:
         return train_df, test_df
     
 
+# ################ PADDED TIMESERIES FOR K-FOLDS ################
+
+def compute_test_days_and_pad_multiplicator(K: int) -> None:
+    n_samples = TimeSeriesProblem()._n_samples
+    pad_hour_multiplicator = int(n_samples // K)
+    test_days = int(pad_hour_multiplicator // 24)
+
+    return test_days, pad_hour_multiplicator
+
+
+def visualize_ts_K_folds(K) -> None:
+    """
+    Visualize the K-folds for the time series problem.
+    """
+    plt.figure(figsize=(15, 5))
+    test_days, pad_hours_multiplicator = compute_test_days_and_pad_multiplicator(K)
+    colors: np.ndarray = _get_k_folds_cmap()(plt.Normalize(0, K)(np.arange(1, K + 1)))
+
+    _train_df, _test_df = TimeSeriesProblem()._get_train_test_df()
+    pd.concat([_train_df, _test_df], axis=0)['Demand'].plot(color='black', ls='--', lw=1)
+    for _j in range(K):
+        _, test_df = TimeSeriesProblem(test_days=test_days, right_pad_hours=int(pad_hours_multiplicator * _j))._get_train_test_df()
+        test_df['Demand'].plot(color=colors[_j], label=f'Fold nº {_j + 1}')
     
+
+    plt.legend()
+    plt.ylabel("Hourly demand (GW)")
+    plt.xlabel("Date")
+    plt.show()
+
+
+def __hex_to_rgb(color_str: str) -> tuple:
+    return tuple(int(color_str[i:i+2], 16)/255 for i in (1, 3, 5))
+
+
+def _get_k_folds_cmap(n_colors: int = 256):
+    return mcolors.LinearSegmentedColormap.from_list(
+        "folds_cmap", [C_LIGHT, C_STRONG], N=n_colors)
