@@ -33,7 +33,6 @@ def _subsample(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
     return {_k: _v[indices] for _k, _v in data.items()}
 
 
-
 def data(
     points: Dict, 
     bounds=None, 
@@ -73,6 +72,7 @@ def data(
 
     return ax
 
+
 def goodness(
     y_test,
     y_pred,
@@ -83,9 +83,11 @@ def goodness(
     rmse,
     cwc,
     ax=None,
-    subsample=None,
+    fading_with_lead_time: bool = False,
+    subsample: float = None,
     **kwargs
 ):
+    
     if subsample is not None:
         _subset = _subsample(
             {'test': y_test, 'pred': y_pred, 
@@ -97,35 +99,53 @@ def goodness(
     if ax is None:
         _, ax = plt.subplots()
 
-    # ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
-    # ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
-
     _outside = (y_test > upper_bound) + (y_test < lower_bound)
     error = np.zeros((2, len(y_pred)))
     error[0, :] = y_pred - lower_bound
     error[1, :] = upper_bound - y_pred
-    ax.errorbar(
-        y_test[~_outside],
-        y_pred[~_outside],
-        yerr=error[:, ~_outside],
-        capsize=5, marker="o", elinewidth=2, linewidth=0,
-        color=C_STRONG,
-        label="Inside PI"
-        )
-    ax.errorbar(
-        y_test[_outside],
-        y_pred[_outside],
-        yerr=error[:, _outside],
-        capsize=5, marker="o", elinewidth=2, linewidth=0, 
-        color=C_LIGHT,
-        label="Outside PI"
-        )
-    ax.scatter(
-        y_test[_outside],
-        y_test[_outside],
-        marker="*", color="black",
-        label="True value"
-    )
+
+    if fading_with_lead_time:
+        alphas: np.ndarray = (np.logspace(0, 1, num=len(y_pred), base=2) - 1)[::-1]
+    else:
+        alphas: np.ndarray = np.ones(len(y_pred))
+    out_legend_printed, in_legend_printed = False, False
+    
+    for i, alpha in enumerate(alphas):
+        in_kwargs = {} if in_legend_printed else {'label': "Inside PI"}
+        out_kwargs = {} if out_legend_printed else {'label': "Outside PI"}
+        true_kwargs = {} if out_legend_printed else {'label': "True value"}
+
+        if not _outside[i]:
+            ax.errorbar(
+                y_test[i],
+                y_pred[i],
+                yerr=error[:, i][:, np.newaxis],
+                capsize=5, marker="o", elinewidth=2, linewidth=0,
+                color=C_STRONG,
+                alpha=alpha,
+                **in_kwargs,
+                )
+            in_legend_printed = True
+
+        if _outside[i]:
+            ax.errorbar(
+                y_test[i],
+                y_pred[i],
+                yerr=error[:, i][:, np.newaxis],
+                capsize=5, marker="o", elinewidth=2, linewidth=0, 
+                color=C_LIGHT,
+                alpha=alpha,
+                **out_kwargs,
+                )
+            ax.scatter(
+                y_test[i],
+                y_test[i],
+                marker="*", color="black",
+                alpha=alpha,
+                **true_kwargs,
+                )
+            out_legend_printed = True
+
     ax.legend(loc='lower right')
     ax.set_xlabel(kwargs.get('xlabel', "Groundtruth"))
     ax.set_ylabel(kwargs.get('ylabel', "Prediction"))
@@ -140,8 +160,8 @@ def goodness(
         + f"Interval width: {np.round(width, 3)}\n"
         + f"CWC: {np.round(cwc, 3)}\n"
         + f"RMSE: {np.round(rmse, 3)}",
-        xy=(0., 0.), # point to annotate
-        xytext=kwargs.get('xytext', (np.min(y_test) * 1.175, np.max(y_pred) * 0.72)),
+        xy=kwargs.get('xy', (0.,0.)),
+        xytext=kwargs.get('xytext', (np.min(y_test) * 1.175, np.max(y_pred) * 0.72)), 
         bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
     )
 
