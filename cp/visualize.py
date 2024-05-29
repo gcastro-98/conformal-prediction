@@ -105,8 +105,8 @@ def goodness(
 
     _outside = (y_test > upper_bound) + (y_test < lower_bound)
     error = np.zeros((2, len(y_pred)))
-    error[0, :] = y_pred - lower_bound
-    error[1, :] = upper_bound - y_pred
+    error[0, :] = np.abs(y_pred - lower_bound)
+    error[1, :] = np.abs(upper_bound - y_pred)
 
     if fading_with_lead_time:
         alphas: np.ndarray = (np.logspace(0, 1, num=len(y_pred), base=2) - 1)[::-1]
@@ -235,7 +235,7 @@ def coverage_by_width(
     intervals: np.ndarray, 
     miscoverage: float,
     cond_coverage: float,
-    hsic_coeff: float,
+    hsic_coeff: float = None,
     num_bins: int = 3, 
     ax=None, **kwargs) -> Any:
 
@@ -256,9 +256,12 @@ def coverage_by_width(
         bottom=True, top=False, 
         labelbottom=False)
     
+    _annotation_text: str = f"SSC score: {np.round(cond_coverage, 4)}"
+    if hsic_coeff is not None:
+        _annotation_text += f"\nHSIC coefficient: {np.round(hsic_coeff, 4)}"
+
     ax.annotate(
-        f"SSC score: {np.round(cond_coverage, 4)}\n" 
-        + f"HSIC coefficient: {np.round(hsic_coeff, 4)}",
+        _annotation_text,
         xy=(0., 0.), # point to annotate
         xytext=(-0.1, 0.05), 
         bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)

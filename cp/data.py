@@ -140,7 +140,7 @@ class RegressionProblem:
         pd.plotting.scatter_matrix(
             self.df, figsize=(10,10), color=C_LIGHT, 
             hist_kwds={'color': C_STRONG, 'bins': 25},)
-        plt.savefig(kwargs.get('save_path', 'output/data-regression-problem.png'), dpi=200)
+        plt.savefig(kwargs.get('save_path', 'output/regression/data-regression-problem.png'), dpi=200)
         plt.show()
         
 
@@ -199,7 +199,7 @@ class TimeSeriesProblem:
         
         self.train_df, self.test_df = self._get_train_test_df()
     
-    def visualize_data(self) -> None:
+    def visualize_data(self, save_path: str = None) -> None:
         plt.figure(figsize=(15, 5))
         if self._right_pad > 0:
             self.train_df['Demand'].iloc[:-self._right_pad].plot(color=C_STRONG, label='Train')
@@ -212,7 +212,10 @@ class TimeSeriesProblem:
         plt.legend()
         plt.ylabel("Hourly demand (GW)")
         plt.xlabel("Date")
+        if save_path is not None:
+            plt.savefig(save_path, dpi=250)
         plt.show()
+        plt.close()
         
     def get_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         X_train = self.train_df[self.features]
@@ -261,7 +264,7 @@ def compute_test_days_and_pad_multiplicator(K: int) -> None:
     return test_days, pad_hour_multiplicator
 
 
-def visualize_ts_K_folds(K, with_change_point: bool = False) -> None:
+def visualize_ts_K_folds(K, with_change_point: bool = False, save_path: str = None) -> None:
     """
     Visualize the K-folds for the time series problem.
     """
@@ -284,11 +287,10 @@ def visualize_ts_K_folds(K, with_change_point: bool = False) -> None:
     plt.legend()
     plt.ylabel("Hourly demand (GW)")
     plt.xlabel("Date")
+    if save_path is not None:
+        plt.savefig(save_path, dpi=250)
     plt.show()
-
-
-def __hex_to_rgb(color_str: str) -> tuple:
-    return tuple(int(color_str[i:i+2], 16)/255 for i in (1, 3, 5))
+    plt.close()
 
 
 def _get_k_folds_cmap(n_colors: int = 256):

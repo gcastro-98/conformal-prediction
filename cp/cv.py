@@ -43,7 +43,7 @@ def fine_tune_lgbm(X_train: np.ndarray, y_train: np.ndarray) -> dict:
     )
 
     logger.info("Computing best hyperparameters from randomized search")
-    logger.debug(4 * " " + "This may take a while")
+    logger.debug(4 * " " + "This may take a while (around 30')")
     optim_model.fit(X_train, y_train)
 
     return optim_model.best_params_
