@@ -1,9 +1,12 @@
 import warnings
 from typing import Any, List
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, RandomizedSearchCV, TimeSeriesSplit
+from lightgbm import LGBMRegressor  # as underlying model
+from sklearn.ensemble import RandomForestRegressor
+from scipy.stats import randint, uniform  # for the random search hyperparameters
 from mapie.regression import MapieQuantileRegressor, MapieRegressor
 from mapie.metrics import regression_coverage_score_v2
-from cp import logger as _logger
+from cp import data, ts, logger as _logger
 
 import pandas as pd
 import numpy as np
@@ -12,6 +15,67 @@ np.random.seed(SEED)
 
 logger = _logger.Logger()
 
+
+# ######## MODEL FINE-TUNING ########
+
+def fine_tune_lgbm(X_train: np.ndarray, y_train: np.ndarray) -> dict:
+    estimator = LGBMRegressor(
+        objective='quantile',
+        alpha=0.5,
+        random_state=SEED,
+        verbose=0
+    )
+    params_distributions = dict(
+        num_leaves=randint(low=10, high=50),
+        max_depth=randint(low=3, high=20),
+        n_estimators=randint(low=50, high=100),
+        learning_rate=uniform()
+    )
+
+    optim_model = RandomizedSearchCV(
+        estimator,
+        param_distributions=params_distributions,
+        n_jobs=-1,
+        n_iter=10,
+        cv=KFold(n_splits=5, shuffle=True, random_state=SEED),
+        verbose=0,
+        random_state=SEED
+    )
+
+    logger.info("Computing best hyperparameters from randomized search")
+    logger.debug(4 * " " + "This may take a while (around 30')")
+    optim_model.fit(X_train, y_train)
+
+    return optim_model.best_params_
+
+def fine_tune_rf_for_ts(X_train: np.ndarray, y_train: np.ndarray, 
+                        n_iter: int = 100,
+                        n_splits: int = 5
+                        ) -> dict:
+    rf_model = RandomForestRegressor(random_state=SEED)
+    rf_params = {
+        "max_depth": randint(2, 30), 
+        "n_estimators": randint(10, 100)
+    }
+    cv_obj = RandomizedSearchCV(
+        rf_model,
+        param_distributions=rf_params,
+        n_iter=n_iter,
+        cv=TimeSeriesSplit(n_splits=n_splits),
+        scoring="neg_root_mean_squared_error",
+        random_state=SEED,
+        verbose=0,
+        n_jobs=-1,
+    )
+
+    logger.info("Computing best hyperparameters from randomized search")
+    logger.debug(4 * " " + "This may take a while")
+    cv_obj.fit(X_train, y_train)
+
+    return cv_obj.best_params_
+
+
+# ######## CROSS-VALIDATIONS FOR COVERAGE EXPERIMENTS ########
 
 def coverage_in_function_of_alpha(X: pd.DataFrame, y: pd.Series, miscoverages_list: List[float], base_estimator: Any, strategy_params: dict, strategy_name: dict, 
                                   seed: int, K: int = 5, silent: bool = False) -> np.ndarray:
@@ -51,4 +115,46 @@ def coverage_in_function_of_alpha(X: pd.DataFrame, y: pd.Series, miscoverages_li
 
             coverages_arr[_i, _j] = float(regression_coverage_score_v2(y_test, _int_pred))
     return coverages_arr
+
+
+def ts_coverage_in_function_of_alpha(
+        miscoverages_list: list, 
+        base_model_params: Any, 
+        strategy_name: str, 
+        with_change_point: bool = False,
+        silent: bool = False, 
+        K: int = 10) -> np.ndarray:
+    """
+    Perform a K-fold cross validation and return the coverage of the predicted confidence intervals in function of the miscoverage level. 
+    Thus, the returned array is of shape (len(miscoverages_list), K).
+
+    **Note**: in the case of timeseries, and in order to break as much autocorrelation as possible,
+      the test data is obtained by making continuous holes in the middle of the data.
+
+    """
+    coverages_arr: np.ndarray = np.zeros((len(miscoverages_list), K))
+
+    for _i, miscoverage in enumerate(miscoverages_list, start=0):
+        if not silent:
+            logger.debug(4 * " " + f"Computing coverage scores for alpha = {miscoverage} ({_i + 1}/{len(miscoverages_list)})")
+
+        test_days, pad_hours_multiplicator = data.compute_test_days_and_pad_multiplicator(K)
+
+        for _j in range(K):
+            if not silent:
+                logger.debug(8 * " " + f"Training {strategy_name} for fold {_j + 1}/{K}")
+
+            ts_problem = data.TimeSeriesProblem(
+                test_days=test_days, right_pad_hours=int(pad_hours_multiplicator * _j),
+                with_change_point=with_change_point)
+            X_train, X_test, y_train, y_test = ts_problem.get_arrays()
             
+            warnings.filterwarnings("ignore")
+            if strategy_name != 'EnbPI':  # then we train EnbPI without partial fit
+                _, _int_pred, _ = ts.train_without_partial_fit(X_train, y_train, X_test, miscoverage, RandomForestRegressor(**base_model_params))
+
+            else:
+                _, _int_pred, _ = ts.train(X_train, y_train, X_test, y_test, miscoverage, RandomForestRegressor(**base_model_params))
+                
+            coverages_arr[_i, _j] = float(regression_coverage_score_v2(y_test, _int_pred))
+    return coverages_arr

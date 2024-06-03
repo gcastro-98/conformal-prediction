@@ -7,4 +7,6 @@ jupyter
 ipykernel
 conda-forge::mapie
 conda-forge::scikit-learn
+conda-forge::statsmodels
+conda-forge::seaborn
 scipy

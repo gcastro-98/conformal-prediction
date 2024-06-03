@@ -10,17 +10,23 @@ from cp.logger import Logger as _logger
 logger = _logger()
 
 
-def rmse(y_pred: dict, y_test: ndarray) -> dict:
+def rmse(
+        y_pred: dict, y_test: ndarray, 
+        silent: bool = False) -> dict:
     errors = {}
 
     for _strat in y_pred.keys():
-        logger.info(f"Validating {_strat} RMSE")
+        if not silent:
+            logger.info(f"Validating {_strat} RMSE")
         errors[_strat] = _sqrt(mean_squared_error(
             y_test, y_pred[_strat]))
     return errors
 
 
-def cwc(intervals: dict, y_test: ndarray, miscoverage: float) -> dict:
+def cwc(
+        intervals: dict, y_test: ndarray, 
+        miscoverage: float, eta: float = 0.01,
+        silent: bool = False) -> dict:
     """
     Coverage Width-based Criterion (CWC) obtained by the prediction intervals.
     
@@ -46,17 +52,20 @@ def cwc(intervals: dict, y_test: ndarray, miscoverage: float) -> dict:
     scores = {}
 
     for _strat in intervals.keys():
-        logger.info(f"Validating {_strat} CWC")
+        if not silent:
+            logger.info(f"Validating {_strat} CWC")
         scores[_strat] = coverage_width_based(
             y_test,
             intervals[_strat][:, 0, 0],
             intervals[_strat][:, 1, 0],
-            eta=0.01, alpha=miscoverage)
+            eta=eta, alpha=miscoverage)
 
     return scores
 
 
-def coverage(intervals: dict, y_test: ndarray, type: str = 'v2') -> dict:
+def coverage(
+        intervals: dict, y_test: ndarray, 
+        type: str = 'v2', silent: bool = False) -> dict:
     coverages = {}
 
     if type == 'v2':  # we use 'regression_coverage_score_v2'
@@ -66,17 +75,21 @@ def coverage(intervals: dict, y_test: ndarray, type: str = 'v2') -> dict:
             _y, _int[:, 0, 0], _int[_strat][:, 1, 0])
 
     for _strat in intervals.keys():
-        logger.info(f"Validating {_strat} coverage")
+        if not silent:
+            logger.info(f"Validating {_strat} coverage")
         coverages[_strat] = float(_func(y_test, intervals[_strat]))
     
     return coverages
 
 
-def width(intervals: dict) -> dict:
+def width(
+        intervals: dict, 
+        silent: bool = False) -> dict:
     widths = {}
 
     for _strat in intervals.keys():
-        logger.info(f"Validating {_strat} width")
+        if not silent:
+            logger.info(f"Validating {_strat} width")
         widths[_strat] = regression_mean_width_score(
             intervals[_strat][:, 0, 0],
             intervals[_strat][:, 1, 0])
@@ -86,7 +99,9 @@ def width(intervals: dict) -> dict:
 
 # CONDITIONAL vs. MARGINAL COVERAGE
 
-def cond_coverage(intervals: dict, y_test: ndarray, num_bins: int = 3) -> dict:
+def cond_coverage(
+        intervals: dict, y_test: ndarray, 
+        num_bins: int = 3, silent: bool = False) -> dict:
     """
     For each strategy: aggregate by the minimum for each alpha the Size-Stratified Coverage.
     Then, it returns the maximum violation of the conditional coverage 
@@ -100,15 +115,17 @@ def cond_coverage(intervals: dict, y_test: ndarray, num_bins: int = 3) -> dict:
             cond_coverages[_strat] = 0.    
             logger.warning(f"Size-Stratified Coverage score set to 0 for {_strat}")
             continue 
-        
-        logger.info(f"Validating {_strat} Size-Stratified Coverage")
+        if not silent:
+            logger.info(f"Validating {_strat} Size-Stratified Coverage")
         cond_coverages[_strat] = float(regression_ssc_score(
             y_test, intervals[_strat][:, :, 0], num_bins=num_bins))
         
     return cond_coverages
 
 
-def hsic_coefficient(intervals: dict, y_test: ndarray) -> dict:
+def hsic_coefficient(
+        intervals: dict, y_test: ndarray,
+        silent: bool = False) -> dict:
     """
     Compute the square root of the hsic coefficient for each strategy. 
     HSIC is Hilbert-Schmidt independence criterion that is a 
@@ -124,7 +141,8 @@ def hsic_coefficient(intervals: dict, y_test: ndarray) -> dict:
     coef_correlations = {}
 
     for _strat in intervals.keys():
-        logger.info(f"Validating {_strat} HSIC coefficient")
+        if not silent:
+            logger.info(f"Validating {_strat} HSIC coefficient")
         coef_correlations[_strat] = float(hsic(y_test, intervals[_strat]))
             
     return coef_correlations

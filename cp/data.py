@@ -2,7 +2,7 @@
 This module contains the data retrieval functions for the different problems.
 """
 
-from os import makedirs
+from os import makedirs, path
 from math import pi as _pi
 from typing import Tuple
 from sklearn.model_selection import train_test_split
@@ -12,6 +12,7 @@ from scipy.stats import norm
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 SEED: int = 123
 np.random.seed(SEED)
@@ -139,7 +140,7 @@ class RegressionProblem:
         pd.plotting.scatter_matrix(
             self.df, figsize=(10,10), color=C_LIGHT, 
             hist_kwds={'color': C_STRONG, 'bins': 25},)
-        plt.savefig(kwargs.get('save_path', 'output/data-regression-problem.png'), dpi=200)
+        plt.savefig(kwargs.get('save_path', 'output/regression/data-regression-problem.png'), dpi=200)
         plt.show()
         
 
@@ -148,3 +149,150 @@ class RegressionProblem:
 
     def _get_label(self) -> pd.DataFrame:
         return self.df[self._label_name]
+    
+
+# ########################################################################
+# TIME SERIES DATA
+# ########################################################################
+
+# ELECTRICITY DEMAND PROBLEM
+
+class TimeSeriesProblem:
+    """
+    Base class for time series' data.
+    """
+    def __init__(
+            self, 
+            n_lag: int = 5, 
+            test_days: int = 7, 
+            right_pad_hours: int = 0,
+            with_change_point: bool = False):
+        """
+        Time series data, for electricity demand forecasting problem, containing a 
+        total of 1340 samples.
+
+        Parameters:
+        -----------
+        n_lag : int
+            Number of lagged features to consider in the model.
+        test_days : int
+            Number of days to consider for the test set.
+        right_pad : int
+            Number of hours to consider for padding the right side of the data.
+            If right_pad is > 0, the test set will be interspersed with the training set.
+        with_change_point : bool
+            If True, then the electricity demand is decreased by 2 GW in the middle of test 
+            set (simulating, this way, an exogenous event).
+
+        """
+        self._with_change_point: bool = with_change_point
+        self._n_samples: int = 1340
+        self._n_lag: int = n_lag 
+        self._num_test_steps: int = 24 * test_days
+        self._right_pad: int = right_pad_hours
+        assert 0 <= self._right_pad <= self._n_samples - self._num_test_steps, \
+            f"Right pad must be between 1 and {self._n_samples} - test_days * 24 hours = {self._n_samples} - {test_days * 24} = {self._n_samples - test_days * 24}"
+        
+        self.features = ["Weekofyear", "Weekday", "Hour", "Temperature"] 
+        self.features += [f"Lag_{hour}" for hour in range(1, self._n_lag)]
+        self.label = "Demand"
+        
+        self.train_df, self.test_df = self._get_train_test_df()
+    
+    def visualize_data(self, save_path: str = None) -> None:
+        plt.figure(figsize=(15, 5))
+        if self._right_pad > 0:
+            self.train_df['Demand'].iloc[:-self._right_pad].plot(color=C_STRONG, label='Train')
+            self.test_df['Demand'].plot(color=C_LIGHT, label='Test')
+            self.train_df['Demand'].iloc[-self._right_pad:].plot(color=C_STRONG)
+        else:
+            self.train_df['Demand'].plot(color=C_STRONG, label='Train')
+            self.test_df['Demand'].plot(color=C_LIGHT, label='Test')
+        
+        plt.legend()
+        plt.ylabel("Hourly demand (GW)")
+        plt.xlabel("Date")
+        if save_path is not None:
+            plt.savefig(save_path, dpi=250)
+        plt.show()
+        plt.close()
+        
+    def get_arrays(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        X_train = self.train_df[self.features]
+        y_train = self.train_df[self.label]
+        X_test = self.test_df[self.features]
+        y_test = self.test_df[self.label]
+        return X_train.values, X_test.values, y_train.values, y_test.values
+        
+    def _get_train_test_df(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        if not path.exists('input/demand_temperature.csv'):
+            url_file = "https://raw.githubusercontent.com/scikit-learn-contrib/MAPIE/master/examples/data/demand_temperature.csv"
+            df = pd.read_csv(url_file, parse_dates=True, index_col=0)
+            df["Date"] = pd.to_datetime(df.index)
+            df["Weekofyear"] = df.Date.dt.isocalendar().week.astype("int64")
+            df["Weekday"] = df.Date.dt.isocalendar().day.astype("int64")
+            df["Hour"] = df.index.hour
+            for hour in range(1, self._n_lag):
+                df[f"Lag_{hour}"] = df["Demand"].shift(hour)
+            
+            df.to_csv('input/demand_temperature.csv', index=False)
+        else:
+            df = pd.read_csv('input/demand_temperature.csv')
+
+        if self._right_pad > 0:
+            train_df: pd.DataFrame = df.iloc[:-self._num_test_steps-self._right_pad, :].copy()
+            test_df: pd.DataFrame = df.iloc[-self._num_test_steps-self._right_pad:-self._right_pad, :].copy()
+            train_df = pd.concat([train_df, df.iloc[-self._right_pad:, :].copy()], axis=0)
+        else:
+            train_df = df.iloc[:-self._num_test_steps, :].copy()
+            test_df = df.iloc[-self._num_test_steps:, :].copy()
+
+        train_df = train_df.loc[~np.any(train_df[self.features].isnull(), axis=1)]
+        if self._with_change_point:
+            test_df[self.label].iloc[len(test_df)// 2:] -= 2
+
+        return train_df, test_df
+        
+
+# ################ PADDED TIMESERIES FOR K-FOLDS ################
+
+def compute_test_days_and_pad_multiplicator(K: int) -> None:
+    n_samples = TimeSeriesProblem()._n_samples
+    pad_hour_multiplicator = int(n_samples // K)
+    test_days = int(pad_hour_multiplicator // 24)
+
+    return test_days, pad_hour_multiplicator
+
+
+def visualize_ts_K_folds(K, with_change_point: bool = False, save_path: str = None) -> None:
+    """
+    Visualize the K-folds for the time series problem.
+    """
+    plt.figure(figsize=(15, 5))
+    test_days, pad_hours_multiplicator = compute_test_days_and_pad_multiplicator(K)
+    colors: np.ndarray = _get_k_folds_cmap()(plt.Normalize(0, K)(np.arange(1, K + 1)))
+
+    _train_df, _test_df = TimeSeriesProblem()._get_train_test_df()
+    pd.concat([_train_df, _test_df], axis=0)['Demand'].plot(
+        color='black', ls='--', lw=1, 
+        label='Original' if with_change_point else 'Original')
+    for _j in range(K):
+        _, test_df = TimeSeriesProblem(
+            test_days=test_days, 
+            right_pad_hours=int(pad_hours_multiplicator * _j), 
+            with_change_point=with_change_point)._get_train_test_df()
+        test_df['Demand'].plot(color=colors[_j], label=f'Fold nº {_j + 1}')
+    
+
+    plt.legend()
+    plt.ylabel("Hourly demand (GW)")
+    plt.xlabel("Date")
+    if save_path is not None:
+        plt.savefig(save_path, dpi=250)
+    plt.show()
+    plt.close()
+
+
+def _get_k_folds_cmap(n_colors: int = 256):
+    return mcolors.LinearSegmentedColormap.from_list(
+        "folds_cmap", [C_LIGHT, C_STRONG], N=n_colors)

@@ -1,6 +1,6 @@
 import os
 import six
-from typing import Dict, List
+from typing import Dict, List, Any
 from mapie.metrics import regression_ssc
 
 import matplotlib.pyplot as plt
@@ -11,7 +11,10 @@ os.makedirs('output', exist_ok=True)
 C_STRONG: str = '#9B0A0A'
 C_MEDIUM: str = '#800000'
 C_LIGHT: str = '#F2BFBF'
+C_PRED: str = '#F87500'
 
+
+# ########### AUXILIARY FUNCTIONS ###########
 
 def _sort(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
     indices = np.argsort(ref)
@@ -23,12 +26,23 @@ def _sort(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
     return {_k: _v[indices] for _k, _v in data.items()}
 
 
+def _subsample(data: Dict, ref: np.ndarray, subsample: float = None) -> Dict:
+    if subsample is not None:
+        indices = np.random.choice(
+            range(len(ref)), replace=False,
+            size=int(len(ref) * subsample))
+
+    return {_k: _v[indices] for _k, _v in data.items()}
+
+
+# ########### MAIN FUNCTIONS ###########
+
 def data(
     points: Dict, 
     bounds=None, 
     intervals=None, 
     ax=None, 
-    **kwargs):
+    **kwargs) -> Any:
     # points = _sort(points)
     
     if ax is None:
@@ -62,6 +76,7 @@ def data(
 
     return ax
 
+
 def goodness(
     y_test,
     y_pred,
@@ -72,48 +87,69 @@ def goodness(
     rmse,
     cwc,
     ax=None,
-    subsample=None,
+    fading_with_lead_time: bool = False,
+    subsample: float = None,
     **kwargs
-):
-    # we sort the data for proper visualization
-    # and, if subsample not None, we take only the passed percentage
-    _sorted = _sort(
-        {'test': y_test, 'pred': y_pred, 
-        'low': lower_bound, 'up': upper_bound}, 
-        y_test, subsample)
-    y_test, y_pred = _sorted['test'], _sorted['pred']
-    lower_bound, upper_bound = _sorted['low'], _sorted['up']
+) -> Any:
+    
+    if subsample is not None:
+        _subset = _subsample(
+            {'test': y_test, 'pred': y_pred, 
+            'low': lower_bound, 'up': upper_bound}, 
+            y_test, subsample)
+        y_test, y_pred = _subset['test'], _subset['pred']
+        lower_bound, upper_bound = _subset['low'], _subset['up']
 
     if ax is None:
         _, ax = plt.subplots()
 
-    # ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
-    # ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f' + "k"))
+    _outside = (y_test > upper_bound) + (y_test < lower_bound)
+    error = np.zeros((2, len(y_pred)))
+    error[0, :] = np.abs(y_pred - lower_bound)
+    error[1, :] = np.abs(upper_bound - y_pred)
 
-    error = y_pred - lower_bound
-    _outside = (y_test > y_pred + error) + (y_test < y_pred - error)
-    ax.errorbar(
-        y_test[~_outside],
-        y_pred[~_outside],
-        yerr=np.abs(error[~_outside]),
-        capsize=5, marker="o", elinewidth=2, linewidth=0,
-        color=C_STRONG,
-        label="Inside PI"
-        )
-    ax.errorbar(
-        y_test[_outside],
-        y_pred[_outside],
-        yerr=np.abs(error[_outside]),
-        capsize=5, marker="o", elinewidth=2, linewidth=0, 
-        color=C_LIGHT,
-        label="Outside PI"
-        )
-    ax.scatter(
-        y_test[_outside],
-        y_test[_outside],
-        marker="*", color="black",
-        label="True value"
-    )
+    if fading_with_lead_time:
+        alphas: np.ndarray = (np.logspace(0, 1, num=len(y_pred), base=2) - 1)[::-1]
+    else:
+        alphas: np.ndarray = np.ones(len(y_pred))
+    out_legend_printed, in_legend_printed = False, False
+    
+    for i, alpha in enumerate(alphas):
+        in_kwargs = {} if in_legend_printed else {'label': "Inside PI"}
+        out_kwargs = {} if out_legend_printed else {'label': "Outside PI"}
+        true_kwargs = {} if out_legend_printed else {'label': "True value"}
+
+        if not _outside[i]:
+            ax.errorbar(
+                y_test[i],
+                y_pred[i],
+                yerr=error[:, i][:, np.newaxis],
+                capsize=5, marker="o", elinewidth=2, linewidth=0,
+                color=C_STRONG,
+                alpha=alpha,
+                **in_kwargs,
+                )
+            in_legend_printed = True
+
+        if _outside[i]:
+            ax.errorbar(
+                y_test[i],
+                y_pred[i],
+                yerr=error[:, i][:, np.newaxis],
+                capsize=5, marker="o", elinewidth=2, linewidth=0, 
+                color=C_LIGHT,
+                alpha=alpha,
+                **out_kwargs,
+                )
+            ax.scatter(
+                y_test[i],
+                y_test[i],
+                marker="*", color="black",
+                alpha=alpha,
+                **true_kwargs,
+                )
+            out_legend_printed = True
+
     ax.legend(loc='lower right')
     ax.set_xlabel(kwargs.get('xlabel', "Groundtruth"))
     ax.set_ylabel(kwargs.get('ylabel', "Prediction"))
@@ -128,8 +164,8 @@ def goodness(
         + f"Interval width: {np.round(width, 3)}\n"
         + f"CWC: {np.round(cwc, 3)}\n"
         + f"RMSE: {np.round(rmse, 3)}",
-        xy=(0., 0.), # point to annotate
-        xytext=(np.min(y_test) * 1.175, np.max(y_pred) * 0.72), 
+        xy=kwargs.get('xy', (0.,0.)),
+        xytext=kwargs.get('xytext', (np.min(y_test) * 1.175, np.max(y_pred) * 0.72)), 
         bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
     )
 
@@ -153,7 +189,7 @@ def width_size_occurrence(
     intervals: np.ndarray, 
     train_intervals: np.ndarray = None,
     num_bins: int = None, 
-    ax=None, **kwargs):
+    ax=None, **kwargs) -> Any:
     if ax is None:
         _, ax = plt.subplots()
     _width = np.abs(intervals[:, 0, 0] - intervals[:, 1, 0])
@@ -199,9 +235,9 @@ def coverage_by_width(
     intervals: np.ndarray, 
     miscoverage: float,
     cond_coverage: float,
-    hsic_coeff: float,
+    hsic_coeff: float = None,
     num_bins: int = 3, 
-    ax=None, **kwargs):
+    ax=None, **kwargs) -> Any:
 
     if ax is None:
         _, ax = plt.subplots()
@@ -217,12 +253,15 @@ def coverage_by_width(
     
     ax.tick_params(
         axis='x', which='both', 
-        bottom=False, top=False, 
+        bottom=True, top=False, 
         labelbottom=False)
     
+    _annotation_text: str = f"SSC score: {np.round(cond_coverage, 4)}"
+    if hsic_coeff is not None:
+        _annotation_text += f"\nHSIC coefficient: {np.round(hsic_coeff, 4)}"
+
     ax.annotate(
-        f"SSC score: {np.round(cond_coverage, 4)}\n" 
-        + f"HSIC coefficient: {np.round(hsic_coeff, 4)}",
+        _annotation_text,
         xy=(0., 0.), # point to annotate
         xytext=(-0.1, 0.05), 
         bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
@@ -254,7 +293,7 @@ def dicts_to_dataframe(metrics: Dict[str, dict]) -> pd.DataFrame:
 def render_mpl_table(data, col_width=3.0, row_height=0.625, font_size=14,
                      row_colors=['#f1f1f2', 'w'], edge_color='w',
                      bbox=[0, 0, 1, 1], header_columns=0,
-                     ax=None, **kwargs):
+                     ax=None, **kwargs) -> Any:
     if ax is None:
         size = (np.array(data.shape[::-1]) + np.array([.25, 1])) * np.array([col_width, row_height])
         _, ax = plt.subplots(figsize=size)
@@ -279,7 +318,7 @@ def render_mpl_table(data, col_width=3.0, row_height=0.625, font_size=14,
     return ax
 
 
-def dataframe_to_png(df, filename):
+def dataframe_to_png(df, filename) -> None:
     _ = render_mpl_table(df, header_columns=0, col_width=2.0)
     plt.savefig(filename)
 
@@ -290,7 +329,7 @@ def coverage_by_alpha(
     coverages_arr: np.ndarray,
     miscoverages_list: List[float],
     strategy_name: str, ax=None, 
-    **kwargs):
+    **kwargs) -> Any:
 
     if ax is None:
         _, ax = plt.subplots()
@@ -316,19 +355,6 @@ def coverage_by_alpha(
     for patch in bplot['boxes']:
         patch.set_facecolor(C_STRONG)
     
-    # ax.tick_params(
-    #     axis='x', which='both', 
-    #     bottom=False, top=False, 
-    #     labelbottom=False)
-    
-    # ax.annotate(
-    #     f"SSC score: {np.round(cond_coverage, 4)}\n" 
-    #     + f"HSIC coefficient: {np.round(hsic_coeff, 4)}",
-    #     xy=(0., 0.), # point to annotate
-    #     xytext=(-0.1, 0.05), 
-    #     bbox=dict(boxstyle="round", fc="white", ec="grey", lw=1)
-    # )
-    
     ax.set_title(strategy_name)
 
     if ax is None:
@@ -338,3 +364,67 @@ def coverage_by_alpha(
         return
 
     return ax
+
+
+# ######## TIME SERIES DATA ########
+
+# PREDICTED VALUES & INTERVALS
+
+def ts(
+        points, 
+        intervals=None, 
+        ax=None,
+        **kwargs
+        ) -> Any:
+    
+    if ax is None:
+        _, ax = plt.subplots()
+    
+    ax.set_ylabel("Hourly demand (GW)")
+    ax.plot(
+        points['X_train'][len(points['X_train']) * 3 // 4:], 
+        points['y_train'][len(points['X_train']) * 3 // 4:], 
+        lw=2, label="Training data", color=C_STRONG)
+    ax.plot(points['X'], points['y_pred'], lw=1.5, label="Predictions", color=C_PRED)
+    ax.plot(points['X'], points['y'], lw=0.75, label="Test data", color=C_LIGHT)
+    ax.fill_between(
+        intervals['X'],
+        intervals['y_low'],
+        intervals['y_up'],
+        color=C_PRED,
+        alpha=0.5,
+        label="Prediction intervals",
+    )
+    ax.legend()
+    ax.set_xlabel(kwargs.get('xlabel', "Date"))
+    ax.set_ylabel(kwargs.get('ylabel', "Hourly demand (GW)"))
+
+    if 'title' in kwargs:
+        ax.set_title(kwargs['title'])
+    if ax is None:
+        plt.savefig(kwargs.get('save_path', 'output/data.png'), dpi=200)
+        plt.show()
+        plt.close()
+        return
+    return ax
+
+
+def rolling_coverage(
+        rolling_coverage: dict, 
+        x_values: pd.Index,
+        window_size: int, 
+        **kwargs) -> None:
+    plt.figure(figsize=(15, 5))
+    plt.xlabel(kwargs.get('xlabel', "Date"))
+    plt.ylabel(kwargs.get('ylabel', f"Rolling coverage [{window_size} hours]"))
+    
+    plt.plot(x_values, rolling_coverage['EnbPI_nP'], label="Without update of residuals", color=C_LIGHT)
+    plt.plot(x_values, rolling_coverage['EnbPI'], label="With update of residuals", color=C_STRONG)
+    plt.legend()
+
+    if 'title' in kwargs:
+        plt.title(kwargs['title'])
+        
+    plt.savefig(kwargs.get('save_path', 'output/rolling-coverage.png'), dpi=200)
+    plt.show();
+    plt.close();
