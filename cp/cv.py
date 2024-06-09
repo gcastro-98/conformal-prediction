@@ -1,12 +1,13 @@
 import warnings
 from typing import Any, List
+from time import process_time
 from sklearn.model_selection import KFold, RandomizedSearchCV, TimeSeriesSplit
 from lightgbm import LGBMRegressor  # as underlying model
 from sklearn.ensemble import RandomForestRegressor
 from scipy.stats import randint, uniform  # for the random search hyperparameters
 from mapie.regression import MapieQuantileRegressor, MapieRegressor
 from mapie.metrics import regression_coverage_score_v2
-from cp import data, ts, logger as _logger
+from cp import data, ts, logger as _logger, validate
 
 import pandas as pd
 import numpy as np
@@ -75,7 +76,93 @@ def fine_tune_rf_for_ts(X_train: np.ndarray, y_train: np.ndarray,
     return cv_obj.best_params_
 
 
+# ######## CROSS-VALIDATIONS FOR METRICS TABLE ########
+
+# ### REGRESSION PROBLEM ###
+
+def regression_metrics(
+        X: pd.DataFrame, y: pd.Series, 
+        miscoverage: float, 
+        base_estimators: Any,
+        strategy_params: dict, 
+        seed: int, K: int = 5,
+        silent: bool = False,
+        **kwargs) -> None:
+    """
+    Perform a K-fold cross validation and return the metrics table for all the strategies.
+
+    **Note**: this can be applied just to the exchangeable case because, 
+    otherwise, the autocorrelation in the data would be kept due to the shuffling.
+
+    """
+    coverage: np.ndarray = np.zeros((len(strategy_params), K))
+    width: np.ndarray = np.zeros((len(strategy_params), K))
+    train_time: np.ndarray = np.zeros((len(strategy_params), K))
+    pred_time: np.ndarray = np.zeros((len(strategy_params), K))
+    rmse: np.ndarray = np.zeros((len(strategy_params), K))
+    cwc: np.ndarray = np.zeros((len(strategy_params), K))
+    ssc: np.ndarray = np.zeros((len(strategy_params), K))
+
+    for _i, _strat in enumerate(list(strategy_params.keys()), start=0):
+        if not silent:
+            logger.debug(4 * " " + f"Computing metrics for strategy {_strat} and miscoverage {miscoverage}")
+
+        for _j, (train_index, test_index) in enumerate(KFold(n_splits=K, random_state=seed, shuffle=True).split(X), start=0):
+            if not silent:
+                logger.debug(8 * " " + f"Training fold {_j + 1}/{K}")
+
+            X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+            y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+            
+            warnings.filterwarnings("ignore")
+    
+            if _strat != 'CQR':
+                mapie = MapieRegressor(base_estimators[_strat], **strategy_params[_strat])
+
+                start = process_time()
+                mapie.fit(X_train, y_train)
+                train_time[_i, _j] = process_time() - start
+
+                start = process_time()
+                _y_pred, _int_pred = mapie.predict(X_test, alpha=miscoverage)
+                pred_time[_i, _j] = process_time() - start
+
+            else:
+                strategy_params[_strat].update({'alpha': miscoverage})
+                mapie = MapieQuantileRegressor(base_estimators[_strat], **strategy_params[_strat])
+
+                start = process_time()
+                mapie.fit(X_train, y_train, random_state=seed)
+                train_time[_i, _j] = process_time() - start
+
+                start = process_time()
+                _y_pred, _int_pred = mapie.predict(X_test)
+                pred_time[_i, _j] = process_time() - start
+
+            int_pred, y_pred = {_strat: _int_pred}, {_strat: _y_pred}
+            coverage[_i, _j] = validate.coverage(int_pred, y_test)[_strat]
+            width[_i, _j] = validate.width(int_pred)[_strat]
+            rmse[_i, _j] = validate.rmse(y_pred, y_test)[_strat]
+            cwc[_i, _j] = validate.cwc(int_pred, y_test, miscoverage)[_strat]
+            ssc[_i, _j] = validate.cond_coverage(_int_pred, y_test, num_bins=kwargs.get('num_bins', 10))[_strat]
+
+    # and we print the results
+    for _i, _strat in enumerate(strategy_params.keys(), start=0):
+        print(f"Miscoverage: {miscoverage}")
+        print(f"Coverage: {np.mean(coverage[_i, :]):.2f} ± {np.std(coverage[_i, :]):.2f}")
+        print(f"Width: {np.mean(width[_i, :]):.2f} ± {np.std(width[_i, :]):.2f}")
+        print(f"RMSE: {np.mean(rmse[_i, :]):.2f} ± {np.std(rmse[_i, :]):.2f}")
+        print(f"CWC: {np.mean(cwc[_i, :]):.2f} ± {np.std(cwc[_i, :]):.2f}")
+        print(f"SSC: {np.mean(ssc[_i, :]):.2f} ± {np.std(ssc[_i, :]):.2f}")
+        print(f"Training time: {np.mean(train_time[_i, :]):.2f} ± {np.std(train_time[_i, :]):.2f}")
+        print(f"Prediction time: {np.mean(pred_time[_i, :]):.2f} ± {np.std(pred_time[_i, :]):.2f}")
+           
+    return None
+
+
 # ######## CROSS-VALIDATIONS FOR COVERAGE EXPERIMENTS ########
+
+# ### REGRESSION PROBLEM ###
 
 def coverage_in_function_of_alpha(X: pd.DataFrame, y: pd.Series, miscoverages_list: List[float], base_estimator: Any, strategy_params: dict, strategy_name: dict, 
                                   seed: int, K: int = 5, silent: bool = False) -> np.ndarray:
@@ -116,6 +203,8 @@ def coverage_in_function_of_alpha(X: pd.DataFrame, y: pd.Series, miscoverages_li
             coverages_arr[_i, _j] = float(regression_coverage_score_v2(y_test, _int_pred))
     return coverages_arr
 
+
+# ### TIMESERIES PROBLEM ###
 
 def ts_coverage_in_function_of_alpha(
         miscoverages_list: list, 
