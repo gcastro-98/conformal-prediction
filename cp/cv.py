@@ -83,7 +83,7 @@ def fine_tune_rf_for_ts(X_train: np.ndarray, y_train: np.ndarray,
 def regression_metrics(
         X: pd.DataFrame, y: pd.Series, 
         miscoverage: float, 
-        base_estimators: Any,
+        base_estimators: dict,
         strategy_params: dict, 
         seed: int, K: int = 5,
         silent: bool = False,
@@ -103,6 +103,7 @@ def regression_metrics(
     cwc: np.ndarray = np.zeros((len(strategy_params), K))
     ssc: np.ndarray = np.zeros((len(strategy_params), K))
 
+    logger.info(f"Assessing strategies' metrics. WAIT: this may take a while.")
     for _i, _strat in enumerate(list(strategy_params.keys()), start=0):
         if not silent:
             logger.debug(4 * " " + f"Computing metrics for strategy {_strat} and miscoverage {miscoverage}")
@@ -140,22 +141,97 @@ def regression_metrics(
                 pred_time[_i, _j] = process_time() - start
 
             int_pred, y_pred = {_strat: _int_pred}, {_strat: _y_pred}
-            coverage[_i, _j] = validate.coverage(int_pred, y_test)[_strat]
-            width[_i, _j] = validate.width(int_pred)[_strat]
-            rmse[_i, _j] = validate.rmse(y_pred, y_test)[_strat]
-            cwc[_i, _j] = validate.cwc(int_pred, y_test, miscoverage)[_strat]
-            ssc[_i, _j] = validate.cond_coverage(_int_pred, y_test, num_bins=kwargs.get('num_bins', 10))[_strat]
+            coverage[_i, _j] = validate.coverage(int_pred, y_test, silent=silent)[_strat]
+            width[_i, _j] = validate.width(int_pred, silent=silent)[_strat]
+            rmse[_i, _j] = validate.rmse(y_pred, y_test, silent=silent)[_strat]
+            cwc[_i, _j] = validate.cwc(int_pred, y_test, miscoverage, silent=silent)[_strat]
+            ssc[_i, _j] = validate.cond_coverage(int_pred, y_test, num_bins=kwargs.get('num_bins', 10), silent=silent)[_strat]
 
     # and we print the results
     for _i, _strat in enumerate(strategy_params.keys(), start=0):
-        print(f"Miscoverage: {miscoverage}")
-        print(f"Coverage: {np.mean(coverage[_i, :]):.2f} ± {np.std(coverage[_i, :]):.2f}")
-        print(f"Width: {np.mean(width[_i, :]):.2f} ± {np.std(width[_i, :]):.2f}")
-        print(f"RMSE: {np.mean(rmse[_i, :]):.2f} ± {np.std(rmse[_i, :]):.2f}")
-        print(f"CWC: {np.mean(cwc[_i, :]):.2f} ± {np.std(cwc[_i, :]):.2f}")
-        print(f"SSC: {np.mean(ssc[_i, :]):.2f} ± {np.std(ssc[_i, :]):.2f}")
-        print(f"Training time: {np.mean(train_time[_i, :]):.2f} ± {np.std(train_time[_i, :]):.2f}")
-        print(f"Prediction time: {np.mean(pred_time[_i, :]):.2f} ± {np.std(pred_time[_i, :]):.2f}")
+        print(f"\n Strategy {_strat} and miscoverage {miscoverage}\n")
+        print(f"Coverage: {np.mean(coverage[_i, :]):.3f} ± {np.std(coverage[_i, :]):.3f}")
+        print(f"Width: {np.mean(width[_i, :]):.3f} ± {np.std(width[_i, :]):.3f}")
+        print(f"RMSE: {np.mean(rmse[_i, :]):.3f} ± {np.std(rmse[_i, :]):.3f}")
+        print(f"CWC: {np.mean(cwc[_i, :]):.3f} ± {np.std(cwc[_i, :]):.3f}")
+        print(f"SSC: {np.mean(ssc[_i, :]):.3f} ± {np.std(ssc[_i, :]):.3f}")
+        print(f"Training time: {np.mean(train_time[_i, :]):.3f} ± {np.std(train_time[_i, :]):.3f}")
+        print(f"Prediction time: {np.mean(pred_time[_i, :]):.3f} ± {np.std(pred_time[_i, :]):.3f}")
+           
+    return None
+
+
+# ### TIMESERIES PROBLEM ###
+
+def timeseries_metrics(
+        miscoverage: float, 
+        base_model_params: dict,
+        with_change_point: bool,
+        K: int = 5,
+        silent: bool = False,
+        **kwargs) -> None:
+    """
+    Perform a K-fold cross validation and return the metrics table for all the strategies.
+
+    **Note**: in the case of timeseries, and in order to break as much autocorrelation as possible,
+      the test data is obtained by making continuous holes in the middle of the data.
+    """
+    coverage: np.ndarray = np.zeros((len(base_model_params), K))
+    width: np.ndarray = np.zeros((len(base_model_params), K))
+    total_time: np.ndarray = np.zeros((len(base_model_params), K))
+    rmse: np.ndarray = np.zeros((len(base_model_params), K))
+    cwc: np.ndarray = np.zeros((len(base_model_params), K))
+    ssc: np.ndarray = np.zeros((len(base_model_params), K))
+
+    test_days, pad_hours_multiplicator = data.compute_test_days_and_pad_multiplicator(K)
+
+    logger.info(f"Assessing strategies' metrics. WAIT: this may take a while.")
+    for _i, _strat in enumerate(list(base_model_params.keys()), start=0):
+        if not silent:
+            logger.debug(4 * " " + f"Computing metrics for strategy {_strat} and miscoverage {miscoverage}")
+
+        for _j in range(K):
+            if not silent:
+                logger.debug(8 * " " + f"Training fold {_j + 1}/{K}")
+            ts_problem = data.TimeSeriesProblem(
+                test_days=test_days, right_pad_hours=int(pad_hours_multiplicator * _j),
+                with_change_point=with_change_point)
+            X_train, X_test, y_train, y_test = ts_problem.get_arrays()
+            
+            warnings.filterwarnings("ignore")
+
+            if _strat != 'EnbPI':  # then we train EnbPI without partial fit
+                start = process_time()
+                _y_pred, _int_pred, _ = ts.train_without_partial_fit(
+                    X_train, y_train, X_test, miscoverage, 
+                    RandomForestRegressor(**base_model_params[_strat]),
+                    silent=silent)
+                total_time[_i, _j] = process_time() - start
+
+            else:
+                start = process_time()
+                _, _int_pred, _ = ts.train(
+                    X_train, y_train, X_test, y_test, miscoverage, 
+                    RandomForestRegressor(**base_model_params[_strat]),
+                    silent=silent)
+                total_time[_i, _j] = process_time() - start
+
+            int_pred, y_pred = {_strat: _int_pred}, {_strat: _y_pred}
+            coverage[_i, _j] = validate.coverage(int_pred, y_test, silent=silent)[_strat]
+            width[_i, _j] = validate.width(int_pred, silent=silent)[_strat]
+            rmse[_i, _j] = validate.rmse(y_pred, y_test, silent=silent)[_strat]
+            cwc[_i, _j] = validate.cwc(int_pred, y_test, miscoverage, silent=silent)[_strat]
+            ssc[_i, _j] = validate.cond_coverage(int_pred, y_test, num_bins=kwargs.get('num_bins', 10), silent=silent)[_strat]
+
+    # and we print the results
+    for _i, _strat in enumerate(base_model_params.keys(), start=0):
+        print(f"\n Strategy {_strat} and miscoverage {miscoverage}\n")
+        print(f"Coverage: {np.mean(coverage[_i, :]):.3f} ± {np.std(coverage[_i, :]):.3f}")
+        print(f"Width: {np.mean(width[_i, :]):.3f} ± {np.std(width[_i, :]):.3f}")
+        print(f"RMSE: {np.mean(rmse[_i, :]):.3f} ± {np.std(rmse[_i, :]):.3f}")
+        print(f"CWC: {np.mean(cwc[_i, :]):.3f} ± {np.std(cwc[_i, :]):.3f}")
+        print(f"SSC: {np.mean(ssc[_i, :]):.3f} ± {np.std(ssc[_i, :]):.3f}")
+        print(f"Total time (training+inference): {np.mean(total_time[_i, :]):.3f} ± {np.std(total_time[_i, :]):.3f}")
            
     return None
 

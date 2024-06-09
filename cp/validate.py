@@ -111,9 +111,10 @@ def cond_coverage(
 
     for _strat in intervals.keys():
         if _std(_abs(intervals[_strat][:, 0, 0] - intervals[_strat][:, 1, 0])) < 1e-10:
-            logger.warning("This metric should be used only with non constant intervals (intervals of different sizes), with constant intervals the result may be misinterpreted.")
-            cond_coverages[_strat] = 0.    
-            logger.warning(f"Size-Stratified Coverage score set to 0 for {_strat}")
+            cond_coverages[_strat] = 0.
+            if not silent:
+                logger.warning("This metric should be used only with non constant intervals (intervals of different sizes), with constant intervals the result may be misinterpreted.")        
+                logger.warning(f"Size-Stratified Coverage score set to 0 for {_strat}")
             continue 
         if not silent:
             logger.info(f"Validating {_strat} Size-Stratified Coverage")
