@@ -210,7 +210,7 @@ def timeseries_metrics(
 
             else:
                 start = process_time()
-                _, _int_pred, _ = ts.train(
+                _y_pred, _int_pred, _ = ts.train(
                     X_train, y_train, X_test, y_test, miscoverage, 
                     RandomForestRegressor(**base_model_params[_strat]),
                     silent=silent)
