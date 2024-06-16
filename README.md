@@ -3,6 +3,8 @@ Uncertainty quantification for distribution-free and data-agnostic problems is a
 In particular, this is applied to regression problems involving both exchangeable and time-series data. 
 This work was carried out as part of (UB 2023) MSc thesis development.
 
+Note the related media can be found at the author's [corresponding repository](https://github.com/gcastro-98/conformal-prediction-media), which deploys a GitHub page so that the [thesis](https://gcastro-98.github.io/conformal-prediction-media/thesis.pdf) and the [presentation](https://gcastro-98.github.io/conformal-prediction-media/slides.pdf) are publicly accessible.
+
 ## Exchangeable data
 
 ### Toy problem
